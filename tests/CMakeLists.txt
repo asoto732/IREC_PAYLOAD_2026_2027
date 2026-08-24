@@ -1,0 +1,3 @@
+add_executable(data_logger_test data_logger_test.cpp)
+target_link_libraries(data_logger_test PRIVATE payload_core)
+add_test(NAME data_logger_test COMMAND data_logger_test)
