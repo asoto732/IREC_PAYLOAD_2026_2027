@@ -1,53 +1,72 @@
 # Recommended First Steps for Fall Semester
 
-These follow directly from the open (`TBD`) items in `docs/REQUIREMENTS.md`
-and are ordered by what blocks the most other work.
+The hardware is selected (`docs/HARDWARE.md`), so the software's open
+questions are no longer "which parts" — they are "does this work on the
+real parts." These three steps match the electronics research's own fall
+plan, ordered by what blocks the most other work.
 
-## 1. Close out the open requirements with Payload Electrical
+## 1. Breadboard the BMP390 + ADXL375 on the Teensy 4.1 and confirm logging at full speed
 
-Everything currently marked `TBD` in `docs/REQUIREMENTS.md` blocks a real
-implementation decision:
+This is the step that turns everything else from an assumption into a
+measurement. Build the two flight-critical sensors on a breadboard with the
+Teensy 4.1 and a microSD card, port the sampling loop in `src/main.cpp`, and
+implement real `ISensor` drivers for the two parts. The loop and
+`DataLogger` only depend on that interface (PLT-3), so this should be new
+driver classes plus a constructor change in `main()`, not a rewrite.
 
-- Final microcontroller/SBC and the language it forces (`PLT-1`).
-- Sensor part numbers and their communication interfaces -- I2C, SPI, UART,
-  or analog (`SEN-7`).
-- Confirmed sampling rates for pressure, temperature, and vibration
-  (`SEN-4`, `SEN-5`) -- the current 1 Hz / 1 Hz / 100 Hz split is a
-  placeholder, not a measured requirement.
-- The selected onboard storage method and its available memory/write budget
-  (`STO-1`, `STO-4`).
-- How recording starts and stops in flight: ground command, power-on,
-  deployment switch, or timer (`CTL-3`).
+What to verify while it is on the bench:
 
-This is a coordination task, not a coding task, but it should happen first
-because it determines whether the rest of fall is spent on driver code,
-porting, or both.
+- The vibration stream actually holds **800 Hz** on the real SPI bus, not
+  just in simulation. The plotting script prints each stream's measured rate
+  (`scripts/plot_data.py`), so this is a one-command check against a real
+  log.
+- The microSD keeps up with `config::kFlushIntervalMs` (250 ms). If writes
+  stall, that constant and the buffering strategy in `src/DataLogger.cpp`
+  are the knobs — `STO-4` is sized from a development-machine measurement,
+  not from the real card.
+- Both sensors on separate SPI peripherals behave as the pin plan in
+  `docs/HARDWARE.md` assumes. Confirm that plan against the real schematic
+  while the board is in front of you (PLT-5).
 
-## 2. Replace simulated sensors with real drivers behind the existing interface
+Add the SHT40 once the two critical sensors are solid; it is a slow stream
+and should not be what makes the first bring-up hard.
 
-Once SEN-7 and PLT-1 are answered, implement real sensor classes against
-`include/payload/ISensor.hpp` (the same interface `PressureSensor`,
-`TemperatureSensor`, and `VibrationSensor` already implement in
-`include/payload/SimulatedSensors.hpp`). Because the sampling loop and
-`DataLogger` only depend on that interface, this should not require
-changing `src/main.cpp`'s scheduling or logging logic -- only swapping which
-concrete sensor classes get constructed. Validate against a bench setup
-before flight integration, and confirm the placeholder bounds/units in
-`SimulatedSensors.hpp` and `docs/DATA_FORMAT.md` against real datasheets.
+## 2. Measure real power draw, size the battery and regulator, and test recovery from a brief dip
 
-## 3. Port storage and recording control to the selected onboard target
+Power sag at ignition is on the risk list, and nothing in software can
+substitute for a measurement. With the breadboard from step 1 running,
+measure the actual draw of the Teensy plus all three sensors, size the
+battery and regulator with margin, then deliberately brown out the supply
+mid-recording. Removing the GPS took ≈31 mA of tracking current off this
+budget, so the sensor side is now dominated by the Teensy itself.
 
-Two things are still ground/dev stand-ins and need to become real:
+The software requirement to check is `ERR-6`: a dip should cost at most one
+flush window, and the file must still open and parse afterwards. Run the
+partial file through `scripts/plot_data.py` — it skips a truncated final
+row rather than failing, so a clean plot from a deliberately interrupted run
+is the pass condition.
 
-- `DataLogger` currently writes to a local filesystem path (`STO-2`). Once
-  the onboard storage method is chosen (SD card, onboard flash, etc.),
-  confirm the write throughput and available space against the sampling
-  rates from step 1, and adjust the flush strategy in
-  `src/DataLogger.cpp` if needed (it currently flushes every row for
-  safety, which may be too slow for a high write budget on constrained
-  storage).
-- Recording currently starts on program launch and stops on `Ctrl+C` or a
-  timer (`CTL-4`). Replace this with the real flight start/stop trigger
-  from `CTL-3` once defined, keeping the same safe-shutdown path
-  (`DataLogger::close()`) so a real trigger loses no data compared to the
-  current Ctrl+C path.
+## 3. Shake-test the prototype and settle the two open decisions it answers
+
+Shake-test the prototype (or fly it non-critically) to confirm mounting and
+that 800 Hz actually captures what the structures team needs. Two open items
+resolve off that data:
+
+- **`SEN-12`: one vibration channel or three.** The ADXL375 measures X, Y
+  and Z; the software logs one channel today. Real shake data shows whether
+  the other two axes carry information worth tripling the vibration data
+  rate for.
+- **`CTL-3`: how recording starts and stops in flight.** This is the last
+  blocking `TBD` and it is a systems decision — ground command, power-on,
+  deployment switch, or timer. Whatever is chosen, it replaces the
+  launch-on-start/Ctrl+C stand-in (`CTL-4`) and must route through the same
+  `DataLogger::close()` path so a real trigger loses no more data than the
+  current one.
+
+One test to add now that the single barometer is a settled decision
+(`FSD-5`): run a logging session with the BMP390 deliberately failed —
+disconnected, or forced to return faults — and confirm the software behaves
+as the failsafe assumes. The disreef stages must fall through to their
+backup timers (REEF-4) and the landing safety net must still fire anything
+left. Those timers are load bearing now, not a rarely exercised path, so
+they deserve a deliberate test rather than an assumption.

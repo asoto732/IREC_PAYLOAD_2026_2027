@@ -6,6 +6,12 @@
 
 namespace payload {
 
+// Software stand-ins for the selected flight hardware (docs/HARDWARE.md).
+// The parts are chosen but not yet in hand, so each class below simulates
+// the stream its real chip will produce, using that chip's datasheet range
+// for the out-of-range bounds. Swapping in a real driver means writing a
+// new ISensor implementation, not touching the sampling loop (PLT-3).
+
 // Shared behavior for all simulated sensors: a slow random walk around a
 // realistic baseline, plus an injected fault rate so the error-handling
 // requirements (ERR-1..ERR-5) are actually exercised during development,
@@ -82,27 +88,44 @@ private:
     std::uniform_real_distribution<double> faultDist_;
 };
 
-// Baselines/bounds are placeholders representative of a small sounding
-// payload; replace with real sensor datasheet ranges once selected (SEN-7).
+// BMP390 (pressure half). Bounds are the datasheet 300-1250 hPa range.
 class PressureSensor : public SimulatedSensorBase {
 public:
     explicit PressureSensor(unsigned seed = 1)
         : SimulatedSensorBase(SensorId::Pressure, /*baseline kPa*/ 101.3,
-                               /*noise*/ 0.05, /*lower*/ 0.0, /*upper*/ 120.0, seed) {}
+                               /*noise*/ 0.05,
+                               config::kPressureMinKpa, config::kPressureMaxKpa, seed) {}
 };
 
+// BMP390 (temperature half) -- same chip as PressureSensor, logged as its
+// own stream because it is its own measurement.
 class TemperatureSensor : public SimulatedSensorBase {
 public:
     explicit TemperatureSensor(unsigned seed = 2)
         : SimulatedSensorBase(SensorId::Temperature, /*baseline C*/ 22.0,
-                               /*noise*/ 0.1, /*lower*/ -40.0, /*upper*/ 85.0, seed) {}
+                               /*noise*/ 0.1,
+                               config::kTemperatureMinC, config::kTemperatureMaxC, seed) {}
 };
 
+// ADXL375. The 200 g full scale is the reason this part was picked: it
+// will not clip on ignition or parachute deployment shock. The simulated
+// noise stays near ground-idle levels since there is no flight profile
+// here -- only the bounds are flight-representative.
 class VibrationSensor : public SimulatedSensorBase {
 public:
     explicit VibrationSensor(unsigned seed = 3)
         : SimulatedSensorBase(SensorId::Vibration, /*baseline g*/ 0.0,
-                               /*noise*/ 0.3, /*lower*/ -16.0, /*upper*/ 16.0, seed) {}
+                               /*noise*/ 0.3,
+                               config::kVibrationMinG, config::kVibrationMaxG, seed) {}
+};
+
+// SHT40. Slow-moving quantity, so a small noise term and 1 Hz sampling.
+class HumiditySensor : public SimulatedSensorBase {
+public:
+    explicit HumiditySensor(unsigned seed = 4)
+        : SimulatedSensorBase(SensorId::Humidity, /*baseline %RH*/ 45.0,
+                               /*noise*/ 0.2,
+                               config::kHumidityMinPct, config::kHumidityMaxPct, seed) {}
 };
 
 } // namespace payload

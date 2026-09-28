@@ -9,10 +9,13 @@ namespace payload {
 // See docs/DATA_FORMAT.md for the reasoning (SEN-3 / FMT-5: vibration
 // samples much faster than pressure/temperature, so a single fixed-width
 // row per timestamp would waste space and complicate partial failures).
+// Each value is one logged stream, not necessarily one chip: pressure and
+// temperature both come off the BMP390. See docs/HARDWARE.md.
 enum class SensorId {
     Pressure,
     Temperature,
-    Vibration
+    Vibration,
+    Humidity
 };
 
 inline const char* toString(SensorId id) {
@@ -20,6 +23,7 @@ inline const char* toString(SensorId id) {
         case SensorId::Pressure:    return "PRESSURE";
         case SensorId::Temperature: return "TEMPERATURE";
         case SensorId::Vibration:   return "VIBRATION";
+        case SensorId::Humidity:    return "HUMIDITY";
     }
     return "UNKNOWN";
 }
@@ -50,7 +54,7 @@ inline const char* toString(StatusCode code) {
 
 // A single timestamped measurement, ready to be written as one CSV row.
 struct Sample {
-    std::uint64_t timeMs;   // elapsed milliseconds since recording start (FMT-2)
+    std::uint64_t timeUs;   // elapsed microseconds since recording start (FMT-2)
     SensorId sensor;
     double value;
     StatusCode status;
