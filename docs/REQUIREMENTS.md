@@ -26,6 +26,9 @@ picked so development can proceed, expected to be revisited.
 | SEN-11 | *Withdrawn with SEN-9.* No receiver, no loss-of-lock handling. | REMOVED |
 | SEN-12 | The ADXL375 measures three axes; this software currently logs one vibration channel. Whether X/Y/Z are each logged (tripling the vibration data rate) shall be decided with Payload Electrical. | TBD |
 
+Driver level requirements for each part (BMP390, ADXL375, SHT40) are in
+`docs/SENSOR_REQUIREMENTS.md`.
+
 ## 2. Timestamping and Data Format
 
 | ID | Requirement | Status |
