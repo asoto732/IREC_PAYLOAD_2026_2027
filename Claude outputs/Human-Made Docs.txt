@@ -1,0 +1,17 @@
+Version 1 - Basic Logger
+ - A C++ Program that can intake the readings from the accelerometer and barometer and save it to a newly created csv, in the proper format (4.1-4.3, 4.5) (Since idk how we'll know when we're doing what, for now this will only fill the row entries for the columns reading from each sensor)
+ - So like, it'll have the log format, the logger class that will queue and format rows, etc.
+ 
+ - The file I was given basically simulates csv saving. It successfully takes in data and saves it to a csv that is formatted how it should.
+
+ - Next, I need to add the following: LogRow, ring buffer, ILogSink, MemorySink, and Logger with formatRow(). Write tests LT1 to LT8, LT12, LT13, and LT14 first or alongside.
+ - By the end of this, I should have a tiny program that pushes a synthetic 800 Hz and 25 Hz stream through the logger and writes a file. Hand that file to the plot script owner so the plot can be built before hardware exists.
+ - So First Step in this is connecting to the actual sensors
+ 
+Version 2 - Data Stream Logger
+ - This step satisfies Build Steps 2 & 3, basically all the laptop requirements
+ - It properly saves data, but also does the other specs detailed in the project requirements
+ - I do need to go through it and actually manually review the code, and see if there's any unecessary bloat, but in the immediate tests it does properly save the data it should
+ - It doesn't have much of the state checking and event checking and whatnot, the current focus is on the sensor reading and I'm not sure how to detect when the events and state changes will occur
+ 
+ - Also, the c++ program itself is split into a large amount of hpp files for better organization and readability.
