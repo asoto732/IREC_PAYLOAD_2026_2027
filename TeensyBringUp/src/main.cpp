@@ -341,6 +341,6 @@ void loop() { //Main loop of the program
   serviceCommands();
   serviceAccelerometer(now);
   serviceBarometer(now);
-  serviceRecovery(now);
+  Recovery(now);
   serviceReport(now);
 }
