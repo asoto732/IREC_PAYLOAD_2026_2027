@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <math.h>
+#include <EEPROM.h>
+#include <string.h>
  
 namespace {
 constexpr uint8_t kBmpAddress = 0x77;
@@ -36,6 +38,10 @@ constexpr uint32_t kI2cTimeoutUs = 5000;
  
 inline unsigned long ul(uint32_t v) { return static_cast<unsigned long>(v); }
  
+constexpr int kRefEepromAddr = 0;
+constexpr uint32_t kRefMagic = 0x52454631;
+constexpr bool kTrustOnlyFrozenReference = true;
+
 struct Timing { //This is for calculating bus budget 
   uint32_t count = 0, totalUs = 0, maxUs = 0; //amount of transactions, total time, and worst case 
   void record(uint32_t us) {
@@ -209,9 +215,55 @@ uint32_t missedAccel = 0, missedBarometer = 0;
 double groundSumPa = 0;
 uint16_t groundCount = 0;
 float groundPa = 0;
+bool referenceFrozen = false;
  
 bool due(uint32_t now, uint32_t when) { return static_cast<int32_t>(now - when) >= 0; }
  
+struct StoredReference {
+  uint32_t magic;
+  float pressurePa;
+  uint32_t frozen;
+  uint32_t check;
+};
+
+uint32_t referenceCheck(const StoredReference& ref) {
+  uint32_t bits;
+  memcpy(&bits, &ref.pressurePa, sizeof(bits));
+  return ref.magic ^ bits ^ ref.frozen ^ 0xA5A5A5A5; //This is a simple checksum to verify the integrity of the reference data
+}
+
+void saveReference() {
+  StoredReference ref{kRefMagic, groundPa, referenceFrozen ? 1u : 0u, 0}; //This is the reference data that will be saved to EEPROM
+  ref.check = referenceCheck(ref);
+  EEPROM.put(kRefEepromAddr, ref);
+}
+
+bool loadReference() {
+  StoredReference ref;
+  EEPROM.get(kRefEepromAddr, ref);
+  if (ref.magic != kRefMagic || ref.check != referenceCheck(ref)) return false; //if the magic number or checksum is invalid, then the reference data is invalid
+  if (kTrustOnlyFrozenReference && !ref.frozen) return false;
+  groundPa = ref.pressurePa;
+  groundCount=kGroundSamples; //if the reference data is valid, then set the ground count to the number of samples used to calculate the reference pressure
+  referenceFrozen = ref.frozen != 0;
+  return true;
+}
+
+void setReferenceFrozen(bool frozen) {
+  if (groundCount < kGroundSamples) return; //if the ground count is less than the number of samples used to calculate the reference pressure, then do not allow the reference to be frozen
+  referenceFrozen = frozen;
+  saveReference();
+}
+
+void clearReference() {
+  StoredReference ref{};
+  EEPROM.put(kRefEepromAddr, ref);
+  groundSumPa = 0;
+  groundCount = 0;
+  groundPa = 0;
+  referenceFrozen = false;
+}
+
 
 uint32_t nextBmpRetryUs = 0;
 uint32_t nextAdxlRetryUs = 0;
@@ -284,6 +336,7 @@ void serviceBarometer(uint32_t now) { //Same thing as the accelerometer, but for
     groundSumPa += pressurePa;
     if (++groundCount == kGroundSamples) {
       groundPa = static_cast<float>(groundSumPa / kGroundSamples);
+      saveReference();
       Serial.printf("GROUND,pressure_pa=%.2f\n", groundPa);
     }
   }
@@ -302,6 +355,10 @@ void serviceCommands() { //This function services the serial commands, reading f
       case 'b': case 'B':
         accelerometer.setFifo(false);
         Serial.println("FIFO,bypass_on");
+        break;
+      case 'r': case 'R':
+        clearReference();
+        Serial.println("REFERENCE,cleared");
         break;
     }
   }
@@ -325,6 +382,9 @@ void serviceReport(uint32_t now) { //This function services the report, printing
  
 void setup() { //Initialize
   Serial.begin(115200);
+  if (loadReference()){
+    Serial.printf("REFERENCE,loaded,pressure_pa=%.2f,frozen=%d\n", groundPa, static_cast<int>(referenceFrozen));
+  }
   Wire.begin();
   Wire.setClock(kI2cClockHz);
   Wire1.begin();
