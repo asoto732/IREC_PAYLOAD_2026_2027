@@ -4,7 +4,8 @@
 #include <math.h>
 #include <EEPROM.h>
 #include <string.h>
- 
+#include "vertical_velocity.h"
+
 namespace {
 constexpr uint8_t kBmpAddress = 0x77;
 constexpr uint8_t kAdxlAddress = 0x53;
@@ -41,6 +42,11 @@ inline unsigned long ul(uint32_t v) { return static_cast<unsigned long>(v); }
 constexpr int kRefEepromAddr = 0;
 constexpr uint32_t kRefMagic = 0x52454631;
 constexpr bool kTrustOnlyFrozenReference = true;
+
+constexpr float kVelocityTauS = 0.5f; //filter time constant **Adjust is neccessary**. Bigger = smoother, Smaller = more responsive, but more noise.
+constexpr float kVelocityMaxGapS = 0.2f; //max gap between samples before filter resets
+VelocityFilter velocityFilter(kVelocityTauS, kVelocityMaxGapS);
+uint32_t lastBarometerSampleUs = 0;
 
 struct Timing { //This is for calculating bus budget 
   uint32_t count = 0, totalUs = 0, maxUs = 0; //amount of transactions, total time, and worst case 
@@ -342,7 +348,10 @@ void serviceBarometer(uint32_t now) { //Same thing as the accelerometer, but for
   }
   const float altitudeM = //The altitude is calculated using the barometric formula. Not sure if this is good for the rocket.
       groundCount >= kGroundSamples ? 44330.0f * (1.0f - powf(pressurePa / groundPa, 0.19029495f)) : NAN;
-  Serial.printf("B,%lu,%.2f,%.2f,%.2f\n", ul(now), pressurePa / 100.0f, temperatureC, altitudeM);
+  const float dts = static_cast<float>(now - lastBarometerSampleUs)*1e-6f;
+  lastBarometerSampleUs = now;
+  const float velocityMps = velocityFilter.update(altitudeM, dts);
+  Serial.printf("B,%lu,%.2f,%.2f,%.2f,%.3f\n", ul(now), pressurePa / 100.0f, temperatureC, altitudeM, velocityMps);
 }
  
 void serviceCommands() { //This function services the serial commands, reading from the serial port and executing the appropriate command
@@ -378,7 +387,7 @@ void serviceReport(uint32_t now) { //This function services the report, printing
   if (!barometer.ready()) errorFlags |= kErrorBmpUnavailable;
   if (!accelerometer.ready()) errorFlags |= kErrorAdxlUnavailable;
 }
-}
+} //Do not delete again. this closes the anonymous namespace
  
 void setup() { //Initialize
   Serial.begin(115200);
