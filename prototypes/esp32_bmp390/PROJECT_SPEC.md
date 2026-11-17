@@ -44,8 +44,8 @@ Everything goes in **your fork** of the repo (Section 5).
 
 | Part | What you do | Time | How |
 |---|---|---|---|
-| 0 | Fork the repo and clone your fork | 10 min | Section 5 |
-| 1 | Set up PlatformIO, upload a test program | 45 min | Follow Guide A, Section 6 |
+| 0 | Fork the repo and clone your fork | 10 min | Section 5 | ****
+| 1 | Set up PlatformIO, upload a test program | 45 min | Follow Guide A, Section 6 | ****
 | 2 | Draw the schematic on paper | 15 min | Section 7 |
 | 3 | Wire the sensor, get readings on screen | 45 min | Follow Guide B |
 | 4 | Write and read a test file in flash | 45 min | Follow Guide C |

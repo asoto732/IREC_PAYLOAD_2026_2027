@@ -76,13 +76,16 @@ void setup() {
     Serial.println("ESP32 BMP390 logger");
 
     // TODO(E32-2): Start I2C on our pins.
-    //     Wire.begin(SDA_PIN, SCL_PIN);
+    Wire.begin(SDA_PIN, SCL_PIN);
 
     // TODO(E32-3): Start the sensor with bmp.begin_I2C(BMP_ADDRESS, &Wire).
     // If it returns false, print "BMP390 not found, check wiring", wait one
     // second, and try again. Keep trying until it works.
     // (A while loop around begin_I2C does this.)
-
+    while(!bmp.begin_I2C(BMP_ADDRESS, &Wire)) {
+        Serial.println("BMP390 not found, check wiring");
+        delay(1000);
+    }
     // PROVIDED: sensor settings. More oversampling = less noise but slower.
     bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_2X);
     bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
@@ -92,11 +95,14 @@ void setup() {
     // If it returns false, print "LittleFS mount failed" and return.
 
     // TODO(E32-7): Open the log for writing, which replaces any old file:
-    //     logFile = LittleFS.open(LOG_PATH, FILE_WRITE);
-    // If (!logFile), print "Could not open log file" and return.
+    logFile = LittleFS.open(LOG_PATH, FILE_WRITE);
+    if (!logFile) {
+        Serial.println("Could not open log file");
+        return;
+    }
 
     // TODO(E32-8): Write the header line to the file:
-    //     time_us,sensor,value,status
+    logFile.println("time_us,sensor,value,status");
 
     // PROVIDED: start the clocks.
     startUs      = micros();
@@ -125,13 +131,17 @@ void loop() {
 
     // TODO(E32-10): If millis() - startMs >= RUN_TIME_MS, call
     // stopRecording() and return.
+    if (millis() - startMs >= RUN_TIME_MS) {
+        stopRecording();
+        return;
+    }
 
     // TODO(E32-5): Only read when it is time. If micros() has not reached
     // nextSampleUs yet, return. Otherwise move nextSampleUs forward by
     // SAMPLE_PERIOD_US. Do not use delay() here.
     //
-    //     if ((int32_t)(micros() - nextSampleUs) < 0) return;
-    //     nextSampleUs += SAMPLE_PERIOD_US;
+    if ((int32_t)(micros() - nextSampleUs) < 0) return;
+    nextSampleUs += SAMPLE_PERIOD_US;
     //
     // (Why the subtraction? micros() wraps back to 0 every ~71 minutes;
     // subtracting still gives the right answer when it does.)
@@ -145,9 +155,19 @@ void loop() {
     //     both with status "OK".
     //   * If it returns false, still write both lines, with value 0 and
     //     status "COMM_ERROR". Never skip a line just because the read failed.
-    (void)t;  // delete this line once you use t
+    if (bmp.performReading()) {
+        writeLine(t, "PRESSURE", bmp.pressure / 1000.0, "OK");
+        writeLine(t, "TEMPERATURE", bmp.temperature, "OK");
+    } else {
+        writeLine(t, "PRESSURE", 0, "COMM_ERROR");
+        writeLine(t, "TEMPERATURE", 0, "COMM_ERROR");
+    }
 
     // TODO(E32-11): If millis() - lastFlushMs >= FLUSH_INTERVAL_MS, call
     // logFile.flush() and set lastFlushMs = millis(). Flushing makes sure a
     // reset or unplugged cable loses at most about one second of data.
+    if (millis() - lastFlushMs >= FLUSH_INTERVAL_MS) {
+        logFile.flush();
+        lastFlushMs = millis();
+    }
 }
